@@ -22,8 +22,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ai_image_recognition_node = mini_pupper_recognition.ai_image_recognition_node:main',
-            'line_following_node = mini_pupper_recognition.line_following_node:main'
+            'ai_line_recognition_node = mini_pupper_recognition.ai_line_recognition_node:main',
+            'movement_node = mini_pupper_recognition.movement_node:main',
+            'ai_face_recognition_node = ai_face_recognition_node.ai_face_recognition_node:main',
+            'music_dance_node = music_dance_node.music_dance_node:main'
         ],
     },
 )

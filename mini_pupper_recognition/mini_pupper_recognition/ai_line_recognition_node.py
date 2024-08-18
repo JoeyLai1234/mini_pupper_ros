@@ -48,7 +48,7 @@ def extract_keyword_constant(input_string):
     return keyword, proportion, orientation
 
 
-def ai_image_response(llm, image, text):
+def ai_line_response(llm, image, text):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
     image_bytes = buffered.getvalue()
@@ -72,25 +72,25 @@ def ai_image_response(llm, image, text):
     return result
 
 
-class AiImageResponse(Node):
+class AiLineResponse(Node):
     def __init__(self):
-        super().__init__('mini_pupper_maze_service')
-        self.sub = self.create_subscription(Image, '/image_raw', self.image_recognition, 10)
-        self.direction_publisher_ = self.create_publisher(String, 'direction', 10)
+        super().__init__('ai_line_response')
+        self.sub = self.create_subscription(Image, '/image_raw', self.line_recognition, 10)
+        self.condition_publisher_ = self.create_publisher(String, 'condition', 10)
         self.extent_publisher_ = self.create_publisher(String, 'extent_of_movement', 10)
         self.orientation_publisher_ = self.create_publisher(String, 'orientation_of_movement', 10)
 
-    def image_recognition(self, msg):
-        direction_input_prompt = """
+    def line_recognition(self, msg):
+        condition_input_prompt = """
         There is a black line in the image. You are an expert in identifying the precise
         position and orientation of the black line from the image.
 
         The output should follow this format:
 
-        [direction] [proportion] [orientation]
+        [condition] [proportion] [orientation]
 
         Where:
-        - [direction] is either "left", "right", or "center" depending on the orientation
+        - [condition] is either "left", "right", or "center" depending on the orientation
         of the line in the image.
         - For vertical lines, "left" means the line is positioned more towards the left
         side of the image, and "right" means the line is positioned more towards the
@@ -110,7 +110,7 @@ class AiImageResponse(Node):
         - [orientation] is either "vertical" or "slanted" depending on the overall
         shape of the line in the image.
 
-        It's important to note that for slanted lines, the "left" and "right" directions
+        It's important to note that for slanted lines, the "left" and "right" conditions
         refer to the orientation of the line itself, not its position in the image. So
         a line that is slanted like "\" would be considered "left", and a line slanted
         like "/" would be considered "right", regardless of where the line is positioned
@@ -128,7 +128,7 @@ class AiImageResponse(Node):
 
         The proportion value should accurately reflect the true position or orientation
         of the line, with values between 0.0 and 1.0. A proportion of 0.0 is not
-        allowed for "left" or "right" directions, as that would indicate a line
+        allowed for "left" or "right" conditions, as that would indicate a line
         strictly in the center.
 
         To determine the orientation, observe the overall shape of the line in the image.
@@ -144,30 +144,30 @@ class AiImageResponse(Node):
         cv_img = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         image = PIL.Image.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
 
-        direction_response = extract_keyword_constant(
-            ai_image_response(multi_model, image=image, text=direction_input_prompt)
+        condition_response = extract_keyword_constant(
+            ai_line_response(multi_model, image=image, text=condition_input_prompt)
         )
-        self.get_logger().info(f"Direction response: {direction_response}")
+        self.get_logger().info(f"condition response: {condition_response}")
 
         message1 = String()
-        direction = direction_response[0]
-        message1.data = direction
-        self.direction_publisher_.publish(message1)
+        condition = condition_response[0]
+        message1.data = condition
+        self.condition_publisher_.publish(message1)
 
         message2 = String()
-        extent = str(direction_response[1])
+        extent = str(condition_response[1])
         message2.data = extent
         self.extent_publisher_.publish(message2)
 
         message3 = String()
-        orientation = direction_response[2]
+        orientation = condition_response[2]
         message3.data = orientation
         self.orientation_publisher_.publish(message3)
 
 
 def main():
     rclpy.init()
-    minimal_service = AiImageResponse()
+    minimal_service = AiLineResponse()
     rclpy.spin(minimal_service)
 
 

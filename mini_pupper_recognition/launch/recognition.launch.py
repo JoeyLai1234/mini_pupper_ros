@@ -17,23 +17,51 @@
 # limitations under the License.
 
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
 
 
 def generate_launch_description():
-    ai_image_recognition_node = Node(
+
+    mark_arg = DeclareLaunchArgument(
+        name='mark',
+        default_value='False',
+        description='Enable mark(picture detection) if true'
+    )
+
+    ai_line_recognition_node = Node(
             package="mini_pupper_recognition",
             namespace="",
-            executable="ai_image_recognition_node",
-            name="ai_image_recognition_node",
-        )
-    line_following_node = Node(
+            executable="ai_line_recognition_node",
+            name="ai_line_recognition_node",
+    )
+    movement_node = Node(
             package="mini_pupper_recognition",
             namespace="",
-            executable="line_following_node",
-            name="line_following_node",
-        )
+            executable="movement_node",
+            name="movement_node",
+    )
+
+    ai_face_recognition_node = Node(
+            package="mini_pupper_recognition",
+            namespace="",
+            executable="ai_face_recognition_node",
+            name="ai_face_recognition_node",
+            condition=IfCondition(LaunchConfiguration('mark'))
+    )
+    music_dance_node = Node(
+            package="mini_pupper_recognition",
+            namespace="",
+            executable="music_dance_node",
+            name="music_dance_node",
+            condition=IfCondition(LaunchConfiguration('mark'))
+    )
+
     return LaunchDescription([
-        ai_image_recognition_node,
-        line_following_node
+        mark_arg,
+        ai_line_recognition_node,
+        movement_node,
+        ai_face_recognition_node,
+        music_dance_node
     ])
