@@ -31,6 +31,7 @@ import os
 import yt_dlp
 from googleapiclient.discovery import build
 import google.auth
+from dotenv import load_dotenv 
 
 
 def extract_keyword_constant(input_string):
@@ -40,6 +41,7 @@ def extract_keyword_constant(input_string):
     condition = ""
     singer = ""
     dancer = ""
+    name = ""
 
     for part in parts:
         if part.lower() in ['yes', 'no']:
@@ -86,23 +88,37 @@ def music_download(singer_name, credentials):
     response = request.execute()
 
     if 'items' in response and len(response['items']) > 0:
-        video_id = response['items'][0]['id']['videoId']
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        item = response['items'][0]
+        if 'id' in item and 'videoId' in item['id']:
+            video_id = item['id']['videoId']
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    output_file = os.path.join(output_dir, singer_name)
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': output_file,
-        'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'}],
-    }
+            output_file = os.path.join(output_dir, singer_name)
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': output_file,
+                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'}],
+            }
 
-    if os.path.exists(output_file):
-        os.remove(output_file)
+            if os.path.exists(output_file):
+                os.remove(output_file)
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
 
-    return f"{output_file}.wav"
+            return f"{output_file}.wav"
+        else:
+            print(f"'videoId' key not found in the API response for singer: {singer_name}")
+    else:
+        print(f"No items found in the API response for singer: {singer_name}")
+
+    return None
+
+
+def init_credentials(key_json_path):
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_json_path
+    credentials, project_id = google.auth.default()
+    return credentials, project_id
 
 
 class AifaceResponse(Node):
@@ -114,29 +130,50 @@ class AifaceResponse(Node):
         self.dancer_publisher_ = self.create_publisher(String, 'is_dancer', 10)
         self.song_publisher_ = self.create_publisher(String, 'song', 10)
 
+        current_file_path = os.path.abspath(__file__)
+        os.chdir(os.path.dirname(current_file_path))
+        self.get_logger().info(f"init chdir: {os.path.dirname(current_file_path)}")
+
+        load_dotenv(dotenv_path='./.env')
+
+        cloud_config = {
+            'api_key_path': os.environ.get('API_KEY_PATH', ''),
+        }
+        api_path = str(cloud_config['api_key_path'])
+        if os.path.exists(api_path):
+            self.get_logger().info("init credentials start.")
+            init_credentials(api_path)
+            self.get_logger().info("init credentials end.")
+        else:
+            self.get_logger().info("credentials file not exist.")
+
     def face_recognition(self, msg):
+
         condition_input_prompt = """
         You are an advanced computer vision and facial recognition AI assistant. Your task is to continuously analyze an
         image stream and detect human faces, determine if the detected faces belong to singers, and if the person is a dancer.
         The output should follow this strict format:
 
-        [condition] [singer] [dancer] [name]
+        [condition] [singer] [dancer] [full_name]
 
         Where:
         - [condition] is "yes" if a human face is detected, or "no" if no face is detected.
         - [singer] is "singer" if the detected face belongs to a singer, or "not_singer" if it does not.
         - [dancer] is "dancer" if the person is a dancer, or "not_dancer" if they are not.
-        - [name] is the name of the person, if it can be identified. If the person cannot be identified, use "unknown".
+        - [full_name] is the full name of the person, with an underscore between the first and last name, if it can be consistently and accurately identified across the image stream. If the person's identity cannot be reliably determined, use "unknown".
+
+        The key challenge in this task is that the image stream may contain inconsistent or inaccurate face detections and identifications. Your model should strive to provide the most accurate and consistent output possible, but be prepared to output "unknown" for the full name if the identity cannot be reliably determined.
 
         Examples:
-        - If a face of Beyoncé is detected: "yes singer dancer Beyoncé"
-        - If a face of a non-singer not dancing is detected: "yes not_singer not_dancer unknown"
-        - If no face is detected: "no not_singer not_dancer unknown"
+        - If a face of Beyoncé Knowles is detected consistently throughout the stream: "yes singer dancer Beyoncé_Knowles"
+        - If the face detection is inconsistent and alternates between a singer and a non-singer: "yes singer not_dancer unknown"
+        - If no face is detected in some frames: "no not_singer not_dancer unknown"
 
         You should output this information for each frame of the image stream, continuously, until the stream ends. Do not
         provide any other information or commentary. Simply output the information in the exact format specified above.
         """
-
+        
+        global credentials
         credentials, _ = google.auth.default()
 
         multi_model = ChatVertexAI(model="gemini-pro-vision")
@@ -150,7 +187,9 @@ class AifaceResponse(Node):
         self.get_logger().info(f"condition response: {condition_response}")
 
         singer_name = condition_response[3]
-        song = music_download(singer_name, credentials)
+
+        if singer_name != '' and singer_name != 'unknown' :
+            song = music_download(singer_name, credentials)
 
         message1 = String()
         condition = condition_response[0]
@@ -168,6 +207,7 @@ class AifaceResponse(Node):
         self.dancer_publisher_.publish(message3)
 
         message4 = String()
+        song = singer_name
         message4.data = song
         self.song_publisher_.publish(message4)
 

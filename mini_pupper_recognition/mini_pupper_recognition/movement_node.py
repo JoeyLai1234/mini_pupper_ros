@@ -35,6 +35,12 @@ class MovementNode(Node):
         self.walk_previous_direction = 0
         self.previous_orientation = ''
 
+        self.direction_sub = self.create_subscription(
+            String,
+            'direction_of_movement',
+            self._direction_callback,
+            10
+        )
         self.extent_sub = self.create_subscription(
             String,
             'extent_of_movement',
